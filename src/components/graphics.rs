@@ -1,10 +1,69 @@
 use leptos::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Window};
-use std::f64::consts::PI;
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, MouseEvent, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+const PARTICLE_DENSITY: f64 = 0.0005; // particles per square pixel
+const PARTICLE_SIZE: f64 = 2.0;
+const MOUSE_RADIUS: f64 = 120.0;
+const REPULSION_STRENGTH: f64 = 8.0;
+const RETURN_SPEED: f64 = 0.03;
+const PARTICLE_COLOR: &str = "rgba(99, 102, 241, 0.6)";
+
+#[derive(Clone)]
+struct Particle {
+    x: f64,
+    y: f64,
+    base_x: f64,
+    base_y: f64,
+    vx: f64,
+    vy: f64,
+}
+
+impl Particle {
+    fn new(x: f64, y: f64) -> Self {
+        Self {
+            x,
+            y,
+            base_x: x,
+            base_y: y,
+            vx: 0.0,
+            vy: 0.0,
+        }
+    }
+
+    fn update(&mut self, mouse_x: f64, mouse_y: f64) {
+        let dx = self.x - mouse_x;
+        let dy = self.y - mouse_y;
+        let distance = (dx * dx + dy * dy).sqrt();
+
+        if distance < MOUSE_RADIUS && distance > 0.0 {
+            let force = (MOUSE_RADIUS - distance) / MOUSE_RADIUS;
+            let angle = dy.atan2(dx);
+            self.vx += angle.cos() * force * REPULSION_STRENGTH;
+            self.vy += angle.sin() * force * REPULSION_STRENGTH;
+        }
+
+        self.x += self.vx;
+        self.y += self.vy;
+
+        self.vx *= 0.92;
+        self.vy *= 0.92;
+
+        let dx_home = self.base_x - self.x;
+        let dy_home = self.base_y - self.y;
+        self.x += dx_home * RETURN_SPEED;
+        self.y += dy_home * RETURN_SPEED;
+    }
+
+    fn draw(&self, ctx: &CanvasRenderingContext2d) {
+        ctx.begin_path();
+        ctx.arc(self.x, self.y, PARTICLE_SIZE, 0.0, std::f64::consts::PI * 2.0).unwrap();
+        ctx.fill();
+    }
+}
 
 #[component]
 pub fn GraphicsCanvas() -> impl IntoView {
@@ -45,8 +104,30 @@ fn start_animation(canvas: HtmlCanvasElement) {
 
     ctx.scale(dpr, dpr).unwrap();
 
-    let shapes = create_shapes(width, height);
-    let time = Rc::new(RefCell::new(0.0_f64));
+    let particles = Rc::new(RefCell::new(create_particles(width, height)));
+    let mouse_pos = Rc::new(RefCell::new((-1000.0, -1000.0)));
+
+    let document = window.document().unwrap();
+
+    let mouse_pos_clone = mouse_pos.clone();
+    let mouse_closure = Closure::<dyn FnMut(MouseEvent)>::new(move |event: MouseEvent| {
+        let mut pos = mouse_pos_clone.borrow_mut();
+        pos.0 = event.client_x() as f64;
+        pos.1 = event.client_y() as f64;
+    });
+
+    document.add_event_listener_with_callback("mousemove", mouse_closure.as_ref().unchecked_ref()).unwrap();
+    mouse_closure.forget();
+
+    let mouse_pos_leave = mouse_pos.clone();
+    let leave_closure = Closure::<dyn FnMut()>::new(move || {
+        let mut pos = mouse_pos_leave.borrow_mut();
+        pos.0 = -1000.0;
+        pos.1 = -1000.0;
+    });
+
+    document.add_event_listener_with_callback("mouseleave", leave_closure.as_ref().unchecked_ref()).unwrap();
+    leave_closure.forget();
 
     let f = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
     let g = f.clone();
@@ -57,14 +138,17 @@ fn start_animation(canvas: HtmlCanvasElement) {
         let width = window.inner_width().unwrap().as_f64().unwrap();
         let height = window.inner_height().unwrap().as_f64().unwrap();
 
-        ctx.set_fill_style(&JsValue::from_str("rgba(10, 10, 15, 0.15)"));
+        ctx.set_fill_style(&JsValue::from_str("rgba(10, 10, 15, 1.0)"));
         ctx.fill_rect(0.0, 0.0, width, height);
 
-        let mut t = time.borrow_mut();
-        *t += 0.008;
+        let (mouse_x, mouse_y) = *mouse_pos.borrow();
 
-        for shape in &shapes {
-            draw_shape(&ctx, shape, *t, width, height);
+        ctx.set_fill_style(&JsValue::from_str(PARTICLE_COLOR));
+
+        let mut particles = particles.borrow_mut();
+        for particle in particles.iter_mut() {
+            particle.update(mouse_x, mouse_y);
+            particle.draw(&ctx);
         }
 
         request_animation_frame(window, f.borrow().as_ref().unwrap());
@@ -96,108 +180,25 @@ fn request_animation_frame(window: Window, closure: &Closure<dyn FnMut()>) {
         .unwrap();
 }
 
-struct Shape {
-    x_ratio: f64,
-    y_ratio: f64,
-    size: f64,
-    rotation_speed: f64,
-    orbit_radius: f64,
-    orbit_speed: f64,
-    sides: u32,
-    color: String,
-    phase: f64,
-}
+fn create_particles(width: f64, height: f64) -> Vec<Particle> {
+    let area = width * height;
+    let particle_count = (area * PARTICLE_DENSITY).round() as usize;
+    let particle_count = particle_count.max(50); // minimum 50 particles
 
-fn create_shapes(_width: f64, _height: f64) -> Vec<Shape> {
-    vec![
-        Shape {
-            x_ratio: 0.7,
-            y_ratio: 0.3,
-            size: 80.0,
-            rotation_speed: 0.5,
-            orbit_radius: 30.0,
-            orbit_speed: 0.3,
-            sides: 6,
-            color: "rgba(99, 102, 241, 0.3)".to_string(),
-            phase: 0.0,
-        },
-        Shape {
-            x_ratio: 0.2,
-            y_ratio: 0.6,
-            size: 60.0,
-            rotation_speed: -0.7,
-            orbit_radius: 20.0,
-            orbit_speed: 0.4,
-            sides: 4,
-            color: "rgba(129, 140, 248, 0.25)".to_string(),
-            phase: PI / 3.0,
-        },
-        Shape {
-            x_ratio: 0.8,
-            y_ratio: 0.7,
-            size: 50.0,
-            rotation_speed: 0.6,
-            orbit_radius: 25.0,
-            orbit_speed: -0.35,
-            sides: 3,
-            color: "rgba(99, 102, 241, 0.2)".to_string(),
-            phase: PI / 2.0,
-        },
-        Shape {
-            x_ratio: 0.3,
-            y_ratio: 0.2,
-            size: 40.0,
-            rotation_speed: -0.4,
-            orbit_radius: 15.0,
-            orbit_speed: 0.5,
-            sides: 5,
-            color: "rgba(165, 180, 252, 0.2)".to_string(),
-            phase: PI,
-        },
-        Shape {
-            x_ratio: 0.5,
-            y_ratio: 0.85,
-            size: 70.0,
-            rotation_speed: 0.3,
-            orbit_radius: 35.0,
-            orbit_speed: -0.25,
-            sides: 8,
-            color: "rgba(99, 102, 241, 0.15)".to_string(),
-            phase: PI * 1.5,
-        },
-    ]
-}
+    let mut particles = Vec::with_capacity(particle_count);
+    let cols = (particle_count as f64).sqrt().ceil() as usize;
+    let rows = (particle_count + cols - 1) / cols;
 
-fn draw_shape(ctx: &CanvasRenderingContext2d, shape: &Shape, time: f64, width: f64, height: f64) {
-    let base_x = shape.x_ratio * width;
-    let base_y = shape.y_ratio * height;
+    let spacing_x = width / (cols + 1) as f64;
+    let spacing_y = height / (rows + 1) as f64;
 
-    let x = base_x + (time * shape.orbit_speed + shape.phase).cos() * shape.orbit_radius;
-    let y = base_y + (time * shape.orbit_speed + shape.phase).sin() * shape.orbit_radius;
-    let rotation = time * shape.rotation_speed;
-
-    ctx.save();
-    ctx.translate(x, y).unwrap();
-    ctx.rotate(rotation).unwrap();
-
-    ctx.begin_path();
-
-    for i in 0..=shape.sides {
-        let angle = (i as f64) * 2.0 * PI / (shape.sides as f64) - PI / 2.0;
-        let px = angle.cos() * shape.size;
-        let py = angle.sin() * shape.size;
-
-        if i == 0 {
-            ctx.move_to(px, py);
-        } else {
-            ctx.line_to(px, py);
-        }
+    for i in 0..particle_count {
+        let col = i % cols;
+        let row = i / cols;
+        let x = spacing_x * (col + 1) as f64 + (js_sys::Math::random() - 0.5) * 20.0;
+        let y = spacing_y * (row + 1) as f64 + (js_sys::Math::random() - 0.5) * 20.0;
+        particles.push(Particle::new(x, y));
     }
 
-    ctx.close_path();
-    ctx.set_stroke_style(&JsValue::from_str(&shape.color));
-    ctx.set_line_width(2.0);
-    ctx.stroke();
-
-    ctx.restore();
+    particles
 }

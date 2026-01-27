@@ -1,6 +1,6 @@
 # kubicz.engineer
 
-My personal website built with Rust (Leptos + WebAssembly).
+My personal website built with Rust.
 
 ## Development
 
@@ -37,7 +37,7 @@ Output in `dist/` folder.
 
 ### Automatic (Recommended)
 
-Push to `master` branch → GitHub Actions builds and deploys automatically.
+Push to `master` branch → GitHub Actions CI builds and deploys automatically.
 
 ### Manual
 

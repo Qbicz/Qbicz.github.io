@@ -10,7 +10,7 @@ pub fn App() -> impl IntoView {
                 <section class="hero">
                     <h1>"Hi, I'm Filip, an engineer that cares"</h1>
                     <p class="subtitle">
-                        "I build things that matter — thoughtfully and reliably. I believe the best solutions come from listening, genuine interest in the technology, and care for the people you help."
+                        "I build products that matter — thoughtfully and reliably. I believe the best solutions come from listening, genuine interest in the technology, and care for the people you help."
                     </p>
                     <p class="subtitle">
                         "Join me in the journey of learning and curiosity."
@@ -22,8 +22,8 @@ pub fn App() -> impl IntoView {
                         <a href="https://linkedin.com/in/kubicz" target="_blank" rel="noopener">
                             "LinkedIn"
                         </a>
-                        <a href="mailto:contact@kubicz.engineer">
-                            "Contact"
+                        <a href="https://linktr.ee/filipkubicz" target="_blank" rel="noopener">
+                            "Linktree"
                         </a>
                     </div>
                 </section>
