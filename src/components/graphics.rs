@@ -138,12 +138,12 @@ fn start_animation(canvas: HtmlCanvasElement) {
         let width = window.inner_width().unwrap().as_f64().unwrap();
         let height = window.inner_height().unwrap().as_f64().unwrap();
 
-        ctx.set_fill_style(&JsValue::from_str("rgba(10, 10, 15, 1.0)"));
+        ctx.set_fill_style_str("rgba(10, 10, 15, 1.0)");
         ctx.fill_rect(0.0, 0.0, width, height);
 
         let (mouse_x, mouse_y) = *mouse_pos.borrow();
 
-        ctx.set_fill_style(&JsValue::from_str(PARTICLE_COLOR));
+        ctx.set_fill_style_str(PARTICLE_COLOR);
 
         let mut particles = particles.borrow_mut();
         for particle in particles.iter_mut() {
