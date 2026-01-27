@@ -1,10 +1,6 @@
 [build]
 target = "index.html"
 dist = "dist"
-release = true
-
-[watch]
-ignore = ["dist", "target"]
 
 [[hooks]]
 stage = "post_build"
