@@ -1,3 +1,21 @@
+# Rust
+/target/
+Cargo.lock
+
+# Trunk build output
+/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Old Jekyll
 _site/
 .sass-cache/
 .jekyll-metadata
