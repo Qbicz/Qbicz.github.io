@@ -65,6 +65,13 @@ impl Particle {
     }
 }
 
+#[derive(Clone)]
+struct CanvasState {
+    width: f64,
+    height: f64,
+    needs_resize: bool,
+}
+
 #[component]
 pub fn GraphicsCanvas() -> impl IntoView {
     let canvas_ref = create_node_ref::<leptos::html::Canvas>();
@@ -81,6 +88,23 @@ pub fn GraphicsCanvas() -> impl IntoView {
             <canvas id="graphics-canvas" node_ref=canvas_ref></canvas>
         </div>
     }
+}
+
+fn setup_canvas(canvas: &HtmlCanvasElement, ctx: &CanvasRenderingContext2d) -> (f64, f64) {
+    let window = web_sys::window().unwrap();
+    let dpr = window.device_pixel_ratio();
+    let width = window.inner_width().unwrap().as_f64().unwrap();
+    let height = window.inner_height().unwrap().as_f64().unwrap();
+
+    canvas.set_width((width * dpr) as u32);
+    canvas.set_height((height * dpr) as u32);
+    canvas.style().set_property("width", &format!("{}px", width)).unwrap();
+    canvas.style().set_property("height", &format!("{}px", height)).unwrap();
+
+    ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).unwrap();
+    ctx.scale(dpr, dpr).unwrap();
+
+    (width, height)
 }
 
 fn start_animation(canvas: HtmlCanvasElement) {
@@ -103,6 +127,12 @@ fn start_animation(canvas: HtmlCanvasElement) {
         .unwrap();
 
     ctx.scale(dpr, dpr).unwrap();
+
+    let canvas_state = Rc::new(RefCell::new(CanvasState {
+        width,
+        height,
+        needs_resize: false,
+    }));
 
     let particles = Rc::new(RefCell::new(create_particles(width, height)));
     let mouse_pos = Rc::new(RefCell::new((-1000.0, -1000.0)));
@@ -129,14 +159,42 @@ fn start_animation(canvas: HtmlCanvasElement) {
     document.add_event_listener_with_callback("mouseleave", leave_closure.as_ref().unchecked_ref()).unwrap();
     leave_closure.forget();
 
+    // Resize handler - just mark that resize is needed
+    let canvas_state_resize = canvas_state.clone();
+    let resize_closure = Closure::<dyn FnMut()>::new(move || {
+        let mut state = canvas_state_resize.borrow_mut();
+        state.needs_resize = true;
+    });
+
+    window.add_event_listener_with_callback("resize", resize_closure.as_ref().unchecked_ref()).unwrap();
+    resize_closure.forget();
+
     let f = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
     let g = f.clone();
 
     let canvas_clone = canvas.clone();
     *g.borrow_mut() = Some(Closure::new(move || {
         let window = web_sys::window().unwrap();
-        let width = window.inner_width().unwrap().as_f64().unwrap();
-        let height = window.inner_height().unwrap().as_f64().unwrap();
+
+        // Check if resize is needed
+        {
+            let mut state = canvas_state.borrow_mut();
+            if state.needs_resize {
+                let (new_width, new_height) = setup_canvas(&canvas_clone, &ctx);
+                state.width = new_width;
+                state.height = new_height;
+                state.needs_resize = false;
+
+                // Recreate particles for new dimensions
+                let mut p = particles.borrow_mut();
+                *p = create_particles(new_width, new_height);
+            }
+        }
+
+        let state = canvas_state.borrow();
+        let width = state.width;
+        let height = state.height;
+        drop(state);
 
         ctx.set_fill_style_str("rgba(10, 10, 15, 1.0)");
         ctx.fill_rect(0.0, 0.0, width, height);
@@ -155,23 +213,6 @@ fn start_animation(canvas: HtmlCanvasElement) {
     }));
 
     request_animation_frame(window, g.borrow().as_ref().unwrap());
-
-    let window = web_sys::window().unwrap();
-    let canvas_for_resize = canvas_clone.clone();
-    let resize_closure = Closure::<dyn FnMut()>::new(move || {
-        let window = web_sys::window().unwrap();
-        let dpr = window.device_pixel_ratio();
-        let width = window.inner_width().unwrap().as_f64().unwrap();
-        let height = window.inner_height().unwrap().as_f64().unwrap();
-
-        canvas_for_resize.set_width((width * dpr) as u32);
-        canvas_for_resize.set_height((height * dpr) as u32);
-        canvas_for_resize.style().set_property("width", &format!("{}px", width)).unwrap();
-        canvas_for_resize.style().set_property("height", &format!("{}px", height)).unwrap();
-    });
-
-    window.add_event_listener_with_callback("resize", resize_closure.as_ref().unchecked_ref()).unwrap();
-    resize_closure.forget();
 }
 
 fn request_animation_frame(window: Window, closure: &Closure<dyn FnMut()>) {
