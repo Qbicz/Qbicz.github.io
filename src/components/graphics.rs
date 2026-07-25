@@ -275,7 +275,7 @@ fn create_particles(width: f64, height: f64) -> Vec<Particle> {
 
     let mut particles = Vec::with_capacity(particle_count);
     let cols = (particle_count as f64).sqrt().ceil() as usize;
-    let rows = (particle_count + cols - 1) / cols;
+    let rows = particle_count.div_ceil(cols);
 
     let spacing_x = width / (cols + 1) as f64;
     let spacing_y = height / (rows + 1) as f64;
