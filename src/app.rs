@@ -1,5 +1,5 @@
-use leptos::*;
 use crate::components::graphics::GraphicsCanvas;
+use leptos::*;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -10,7 +10,7 @@ pub fn App() -> impl IntoView {
                 <section class="hero">
                     <h1>"Hi, I'm Filip, an engineer that cares"</h1>
                     <p class="subtitle">
-                        "I build products that matter — thoughtfully and reliably. I believe the best solutions come from listening, genuine interest in the technology, and care for the people you help."
+                        "I build products that matter, thoughtfully and reliably. I believe the best solutions come from listening, genuine interest in the technology, and care for the people you help."
                     </p>
                     <p class="subtitle">
                         "Join me in the journey of learning and curiosity."

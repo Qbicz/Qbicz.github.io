@@ -1,15 +1,17 @@
 use leptos::*;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, MouseEvent, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, PointerEvent, Window};
 
 const PARTICLE_DENSITY: f64 = 0.0005; // particles per square pixel
 const PARTICLE_SIZE: f64 = 2.0;
-const MOUSE_RADIUS: f64 = 120.0;
+const POINTER_RADIUS: f64 = 120.0;
 const REPULSION_STRENGTH: f64 = 8.0;
 const RETURN_SPEED: f64 = 0.03;
+const DRIFT_X: f64 = 5.0;
+const DRIFT_Y: f64 = 7.0;
 const PARTICLE_COLOR: &str = "rgba(99, 102, 241, 0.6)";
 
 #[derive(Clone)]
@@ -34,13 +36,13 @@ impl Particle {
         }
     }
 
-    fn update(&mut self, mouse_x: f64, mouse_y: f64) {
-        let dx = self.x - mouse_x;
-        let dy = self.y - mouse_y;
+    fn update(&mut self, pointer_x: f64, pointer_y: f64, time: f64, reduced_motion: bool) {
+        let dx = self.x - pointer_x;
+        let dy = self.y - pointer_y;
         let distance = (dx * dx + dy * dy).sqrt();
 
-        if distance < MOUSE_RADIUS && distance > 0.0 {
-            let force = (MOUSE_RADIUS - distance) / MOUSE_RADIUS;
+        if !reduced_motion && distance < POINTER_RADIUS && distance > 0.0 {
+            let force = (POINTER_RADIUS - distance) / POINTER_RADIUS;
             let angle = dy.atan2(dx);
             self.vx += angle.cos() * force * REPULSION_STRENGTH;
             self.vy += angle.sin() * force * REPULSION_STRENGTH;
@@ -52,15 +54,30 @@ impl Particle {
         self.vx *= 0.92;
         self.vy *= 0.92;
 
-        let dx_home = self.base_x - self.x;
-        let dy_home = self.base_y - self.y;
+        let (drift_x, drift_y) = if reduced_motion {
+            (0.0, 0.0)
+        } else {
+            (
+                (time * 0.00035 + self.base_y * 0.008).sin() * DRIFT_X,
+                (time * 0.00028 + self.base_x * 0.007).cos() * DRIFT_Y,
+            )
+        };
+        let dx_home = self.base_x + drift_x - self.x;
+        let dy_home = self.base_y + drift_y - self.y;
         self.x += dx_home * RETURN_SPEED;
         self.y += dy_home * RETURN_SPEED;
     }
 
     fn draw(&self, ctx: &CanvasRenderingContext2d) {
         ctx.begin_path();
-        ctx.arc(self.x, self.y, PARTICLE_SIZE, 0.0, std::f64::consts::PI * 2.0).unwrap();
+        ctx.arc(
+            self.x,
+            self.y,
+            PARTICLE_SIZE,
+            0.0,
+            std::f64::consts::PI * 2.0,
+        )
+        .unwrap();
         ctx.fill();
     }
 }
@@ -92,14 +109,20 @@ pub fn GraphicsCanvas() -> impl IntoView {
 
 fn setup_canvas(canvas: &HtmlCanvasElement, ctx: &CanvasRenderingContext2d) -> (f64, f64) {
     let window = web_sys::window().unwrap();
-    let dpr = window.device_pixel_ratio();
+    let dpr = window.device_pixel_ratio().min(2.0);
     let width = window.inner_width().unwrap().as_f64().unwrap();
     let height = window.inner_height().unwrap().as_f64().unwrap();
 
     canvas.set_width((width * dpr) as u32);
     canvas.set_height((height * dpr) as u32);
-    canvas.style().set_property("width", &format!("{}px", width)).unwrap();
-    canvas.style().set_property("height", &format!("{}px", height)).unwrap();
+    canvas
+        .style()
+        .set_property("width", &format!("{}px", width))
+        .unwrap();
+    canvas
+        .style()
+        .set_property("height", &format!("{}px", height))
+        .unwrap();
 
     ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).unwrap();
     ctx.scale(dpr, dpr).unwrap();
@@ -109,15 +132,27 @@ fn setup_canvas(canvas: &HtmlCanvasElement, ctx: &CanvasRenderingContext2d) -> (
 
 fn start_animation(canvas: HtmlCanvasElement) {
     let window = web_sys::window().expect("no window");
-    let dpr = window.device_pixel_ratio();
+    let dpr = window.device_pixel_ratio().min(2.0);
+    let reduced_motion = window
+        .match_media("(prefers-reduced-motion: reduce)")
+        .ok()
+        .flatten()
+        .map(|query| query.matches())
+        .unwrap_or(false);
 
     let width = window.inner_width().unwrap().as_f64().unwrap();
     let height = window.inner_height().unwrap().as_f64().unwrap();
 
     canvas.set_width((width * dpr) as u32);
     canvas.set_height((height * dpr) as u32);
-    canvas.style().set_property("width", &format!("{}px", width)).unwrap();
-    canvas.style().set_property("height", &format!("{}px", height)).unwrap();
+    canvas
+        .style()
+        .set_property("width", &format!("{}px", width))
+        .unwrap();
+    canvas
+        .style()
+        .set_property("height", &format!("{}px", height))
+        .unwrap();
 
     let ctx = canvas
         .get_context("2d")
@@ -135,29 +170,39 @@ fn start_animation(canvas: HtmlCanvasElement) {
     }));
 
     let particles = Rc::new(RefCell::new(create_particles(width, height)));
-    let mouse_pos = Rc::new(RefCell::new((-1000.0, -1000.0)));
+    let pointer_pos = Rc::new(RefCell::new((-1000.0, -1000.0)));
 
     let document = window.document().unwrap();
 
-    let mouse_pos_clone = mouse_pos.clone();
-    let mouse_closure = Closure::<dyn FnMut(MouseEvent)>::new(move |event: MouseEvent| {
-        let mut pos = mouse_pos_clone.borrow_mut();
+    let pointer_pos_move = pointer_pos.clone();
+    let pointer_closure = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
+        let mut pos = pointer_pos_move.borrow_mut();
         pos.0 = event.client_x() as f64;
         pos.1 = event.client_y() as f64;
     });
 
-    document.add_event_listener_with_callback("mousemove", mouse_closure.as_ref().unchecked_ref()).unwrap();
-    mouse_closure.forget();
+    document
+        .add_event_listener_with_callback("pointermove", pointer_closure.as_ref().unchecked_ref())
+        .unwrap();
+    pointer_closure.forget();
 
-    let mouse_pos_leave = mouse_pos.clone();
-    let leave_closure = Closure::<dyn FnMut()>::new(move || {
-        let mut pos = mouse_pos_leave.borrow_mut();
+    let pointer_pos_reset = pointer_pos.clone();
+    let reset_closure = Closure::<dyn FnMut()>::new(move || {
+        let mut pos = pointer_pos_reset.borrow_mut();
         pos.0 = -1000.0;
         pos.1 = -1000.0;
     });
 
-    document.add_event_listener_with_callback("mouseleave", leave_closure.as_ref().unchecked_ref()).unwrap();
-    leave_closure.forget();
+    document
+        .add_event_listener_with_callback("pointercancel", reset_closure.as_ref().unchecked_ref())
+        .unwrap();
+    document
+        .add_event_listener_with_callback("pointerup", reset_closure.as_ref().unchecked_ref())
+        .unwrap();
+    document
+        .add_event_listener_with_callback("pointerleave", reset_closure.as_ref().unchecked_ref())
+        .unwrap();
+    reset_closure.forget();
 
     // Resize handler - just mark that resize is needed
     let canvas_state_resize = canvas_state.clone();
@@ -166,7 +211,9 @@ fn start_animation(canvas: HtmlCanvasElement) {
         state.needs_resize = true;
     });
 
-    window.add_event_listener_with_callback("resize", resize_closure.as_ref().unchecked_ref()).unwrap();
+    window
+        .add_event_listener_with_callback("resize", resize_closure.as_ref().unchecked_ref())
+        .unwrap();
     resize_closure.forget();
 
     let f = Rc::new(RefCell::new(None::<Closure<dyn FnMut()>>));
@@ -196,16 +243,16 @@ fn start_animation(canvas: HtmlCanvasElement) {
         let height = state.height;
         drop(state);
 
-        ctx.set_fill_style_str("rgba(10, 10, 15, 1.0)");
-        ctx.fill_rect(0.0, 0.0, width, height);
+        ctx.clear_rect(0.0, 0.0, width, height);
 
-        let (mouse_x, mouse_y) = *mouse_pos.borrow();
+        let (pointer_x, pointer_y) = *pointer_pos.borrow();
+        let time = js_sys::Date::now();
 
         ctx.set_fill_style_str(PARTICLE_COLOR);
 
         let mut particles = particles.borrow_mut();
         for particle in particles.iter_mut() {
-            particle.update(mouse_x, mouse_y);
+            particle.update(pointer_x, pointer_y, time, reduced_motion);
             particle.draw(&ctx);
         }
 
