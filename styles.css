@@ -34,12 +34,28 @@ html, body {
     width: 100%;
     height: 100%;
     z-index: 0;
+    overflow: hidden;
     pointer-events: none;
 }
 
 #graphics-canvas {
+    position: relative;
+    z-index: 1;
+    display: block;
     width: 100%;
     height: 100%;
+}
+
+.canvas-container::before,
+.canvas-container::after {
+    content: "";
+    position: absolute;
+    display: none;
+    width: 75vmax;
+    height: 75vmax;
+    border-radius: 50%;
+    opacity: 0;
+    will-change: transform;
 }
 
 .content {
@@ -110,6 +126,66 @@ html, body {
     color: var(--text-secondary);
 }
 
+@media (max-width: 768px), (pointer: coarse) {
+    .canvas-container {
+        background:
+            radial-gradient(circle at 50% 45%, rgba(35, 37, 80, 0.2), transparent 52%),
+            var(--bg-primary);
+    }
+
+    .canvas-container::before,
+    .canvas-container::after {
+        display: block;
+        opacity: 1;
+    }
+
+    .canvas-container::before {
+        top: -36vmax;
+        left: -32vmax;
+        background: radial-gradient(
+            circle,
+            rgba(99, 102, 241, 0.32) 0%,
+            rgba(79, 70, 229, 0.12) 38%,
+            transparent 68%
+        );
+        animation: mobile-orbit-one 14s ease-in-out infinite alternate;
+    }
+
+    .canvas-container::after {
+        right: -40vmax;
+        bottom: -34vmax;
+        background: radial-gradient(
+            circle,
+            rgba(129, 140, 248, 0.24) 0%,
+            rgba(67, 56, 202, 0.1) 42%,
+            transparent 70%
+        );
+        animation: mobile-orbit-two 18s ease-in-out infinite alternate;
+    }
+
+    #graphics-canvas {
+        opacity: 0.88;
+    }
+}
+
+@keyframes mobile-orbit-one {
+    from {
+        transform: translate3d(0, 0, 0) scale(0.9);
+    }
+    to {
+        transform: translate3d(42vw, 38vh, 0) scale(1.18);
+    }
+}
+
+@keyframes mobile-orbit-two {
+    from {
+        transform: translate3d(0, 0, 0) scale(1.12);
+    }
+    to {
+        transform: translate3d(-36vw, -32vh, 0) scale(0.88);
+    }
+}
+
 @media (max-width: 480px) {
     .links {
         flex-direction: column;
@@ -118,5 +194,13 @@ html, body {
 
     .links a {
         justify-content: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .canvas-container::before,
+    .canvas-container::after {
+        animation: none;
+        will-change: auto;
     }
 }
