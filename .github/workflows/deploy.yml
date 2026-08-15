@@ -33,7 +33,9 @@ jobs:
           sudo mv trunk /usr/local/bin/
 
       - name: Build
-        run: trunk build --release
+        run: |
+          trunk build --release
+          cp dist/index.html dist/404.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
