@@ -3,7 +3,7 @@ use leptos_router::A;
 
 #[component]
 pub fn RerunPage() -> impl IntoView {
-    let rerun_url = "https://app.rerun.io/version/0.36.0/index.html?url=https%3A%2F%2Fapp.rerun.io%2Fversion%2F0.36.0%2Fexamples%2Farkit_scenes.rrd";
+    let rerun_url = "https://app.rerun.io/version/0.36.0/index.html?url=https%3A%2F%2Fapp.rerun.io%2Fversion%2F0.36.0%2Fexamples%2Fnuscenes_dataset.rrd";
 
     view! {
         <main class="rerun-page">
