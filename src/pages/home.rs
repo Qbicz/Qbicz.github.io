@@ -24,12 +24,12 @@ pub fn HomePage() -> impl IntoView {
             </section>
 
             <footer class="bottom-section">
-                <A href="/rerun-camera-visualization" class="subpage-link">
-                    "Rerun camera visualization"
-                </A>
                 <a href="https://kubicz.engineer/fast-reading-app/" class="subpage-link">
                     "Fast reading app"
                 </a>
+                <A href="/rerun-camera-visualization" class="subpage-link">
+                    "Rerun camera visualization"
+                </A>
             </footer>
         </main>
     }

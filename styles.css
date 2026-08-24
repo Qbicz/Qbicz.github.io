@@ -232,7 +232,7 @@ html, body {
 @media (max-width: 768px), (pointer: coarse) {
     .canvas-container {
         background:
-            radial-gradient(circle at 50% 45%, rgba(35, 37, 80, 0.2), transparent 52%),
+            radial-gradient(circle at 50% 45%, rgba(48, 50, 112, 0.3), transparent 56%),
             var(--bg-primary);
     }
 
@@ -247,11 +247,11 @@ html, body {
         left: -32vmax;
         background: radial-gradient(
             circle,
-            rgba(99, 102, 241, 0.32) 0%,
-            rgba(79, 70, 229, 0.12) 38%,
+            rgba(99, 102, 241, 0.46) 0%,
+            rgba(79, 70, 229, 0.2) 40%,
             transparent 68%
         );
-        animation: mobile-orbit-one 14s ease-in-out infinite alternate;
+        animation: mobile-orbit-one 9s ease-in-out infinite alternate;
     }
 
     .canvas-container::after {
@@ -259,15 +259,15 @@ html, body {
         bottom: -34vmax;
         background: radial-gradient(
             circle,
-            rgba(129, 140, 248, 0.24) 0%,
-            rgba(67, 56, 202, 0.1) 42%,
+            rgba(129, 140, 248, 0.38) 0%,
+            rgba(67, 56, 202, 0.18) 42%,
             transparent 70%
         );
-        animation: mobile-orbit-two 18s ease-in-out infinite alternate;
+        animation: mobile-orbit-two 12s ease-in-out infinite alternate;
     }
 
     #graphics-canvas {
-        opacity: 0.88;
+        opacity: 0.96;
     }
 }
 
@@ -276,7 +276,7 @@ html, body {
         transform: translate3d(0, 0, 0) scale(0.9);
     }
     to {
-        transform: translate3d(42vw, 38vh, 0) scale(1.18);
+        transform: translate3d(58vw, 48vh, 0) scale(1.24);
     }
 }
 
@@ -285,7 +285,7 @@ html, body {
         transform: translate3d(0, 0, 0) scale(1.12);
     }
     to {
-        transform: translate3d(-36vw, -32vh, 0) scale(0.88);
+        transform: translate3d(-52vw, -44vh, 0) scale(0.82);
     }
 }
 

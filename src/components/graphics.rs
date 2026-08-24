@@ -7,12 +7,34 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, PointerEvent, Window}
 
 const PARTICLE_DENSITY: f64 = 0.0005; // particles per square pixel
 const PARTICLE_SIZE: f64 = 2.0;
-const POINTER_RADIUS: f64 = 120.0;
-const REPULSION_STRENGTH: f64 = 8.0;
+const MOUSE_RADIUS: f64 = 120.0;
+const MOUSE_STRENGTH: f64 = 8.0;
+const TOUCH_RADIUS: f64 = 210.0;
+const TOUCH_STRENGTH: f64 = 18.0;
 const RETURN_SPEED: f64 = 0.03;
-const DRIFT_X: f64 = 5.0;
-const DRIFT_Y: f64 = 7.0;
-const PARTICLE_COLOR: &str = "rgba(99, 102, 241, 0.6)";
+const DRIFT_X: f64 = 9.0;
+const DRIFT_Y: f64 = 12.0;
+const MOBILE_DRIFT_SCALE: f64 = 1.8;
+const PARTICLE_COLOR: &str = "rgba(99, 102, 241, 0.72)";
+
+#[derive(Clone, Copy)]
+struct PointerState {
+    x: f64,
+    y: f64,
+    radius: f64,
+    strength: f64,
+}
+
+impl PointerState {
+    fn inactive() -> Self {
+        Self {
+            x: -1000.0,
+            y: -1000.0,
+            radius: MOUSE_RADIUS,
+            strength: MOUSE_STRENGTH,
+        }
+    }
+}
 
 #[derive(Clone)]
 struct Particle {
@@ -36,16 +58,16 @@ impl Particle {
         }
     }
 
-    fn update(&mut self, pointer_x: f64, pointer_y: f64, time: f64, reduced_motion: bool) {
-        let dx = self.x - pointer_x;
-        let dy = self.y - pointer_y;
+    fn update(&mut self, pointer: PointerState, time: f64, drift_scale: f64, reduced_motion: bool) {
+        let dx = self.x - pointer.x;
+        let dy = self.y - pointer.y;
         let distance = (dx * dx + dy * dy).sqrt();
 
-        if !reduced_motion && distance < POINTER_RADIUS && distance > 0.0 {
-            let force = (POINTER_RADIUS - distance) / POINTER_RADIUS;
+        if !reduced_motion && distance < pointer.radius && distance > 0.0 {
+            let force = (pointer.radius - distance) / pointer.radius;
             let angle = dy.atan2(dx);
-            self.vx += angle.cos() * force * REPULSION_STRENGTH;
-            self.vy += angle.sin() * force * REPULSION_STRENGTH;
+            self.vx += angle.cos() * force * pointer.strength;
+            self.vy += angle.sin() * force * pointer.strength;
         }
 
         self.x += self.vx;
@@ -58,8 +80,8 @@ impl Particle {
             (0.0, 0.0)
         } else {
             (
-                (time * 0.00035 + self.base_y * 0.008).sin() * DRIFT_X,
-                (time * 0.00028 + self.base_x * 0.007).cos() * DRIFT_Y,
+                (time * 0.00058 + self.base_y * 0.008).sin() * DRIFT_X * drift_scale,
+                (time * 0.00044 + self.base_x * 0.007).cos() * DRIFT_Y * drift_scale,
             )
         };
         let dx_home = self.base_x + drift_x - self.x;
@@ -139,6 +161,13 @@ fn start_animation(canvas: HtmlCanvasElement) {
         .flatten()
         .map(|query| query.matches())
         .unwrap_or(false);
+    let drift_scale = window
+        .match_media("(max-width: 768px), (pointer: coarse)")
+        .ok()
+        .flatten()
+        .filter(|query| query.matches())
+        .map(|_| MOBILE_DRIFT_SCALE)
+        .unwrap_or(1.0);
 
     let width = window.inner_width().unwrap().as_f64().unwrap();
     let height = window.inner_height().unwrap().as_f64().unwrap();
@@ -170,27 +199,37 @@ fn start_animation(canvas: HtmlCanvasElement) {
     }));
 
     let particles = Rc::new(RefCell::new(create_particles(width, height)));
-    let pointer_pos = Rc::new(RefCell::new((-1000.0, -1000.0)));
+    let pointer_state = Rc::new(RefCell::new(PointerState::inactive()));
 
     let document = window.document().unwrap();
 
-    let pointer_pos_move = pointer_pos.clone();
+    let pointer_state_move = pointer_state.clone();
     let pointer_closure = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
-        let mut pos = pointer_pos_move.borrow_mut();
-        pos.0 = event.client_x() as f64;
-        pos.1 = event.client_y() as f64;
+        let is_touch = event.pointer_type() == "touch";
+        let mut pointer = pointer_state_move.borrow_mut();
+        pointer.x = event.client_x() as f64;
+        pointer.y = event.client_y() as f64;
+        pointer.radius = if is_touch { TOUCH_RADIUS } else { MOUSE_RADIUS };
+        pointer.strength = if is_touch {
+            TOUCH_STRENGTH
+        } else {
+            MOUSE_STRENGTH
+        };
     });
 
+    document
+        .add_event_listener_with_callback("pointerdown", pointer_closure.as_ref().unchecked_ref())
+        .unwrap();
     document
         .add_event_listener_with_callback("pointermove", pointer_closure.as_ref().unchecked_ref())
         .unwrap();
     pointer_closure.forget();
 
-    let pointer_pos_reset = pointer_pos.clone();
+    let pointer_state_reset = pointer_state.clone();
     let reset_closure = Closure::<dyn FnMut()>::new(move || {
-        let mut pos = pointer_pos_reset.borrow_mut();
-        pos.0 = -1000.0;
-        pos.1 = -1000.0;
+        let mut pointer = pointer_state_reset.borrow_mut();
+        pointer.x = -1000.0;
+        pointer.y = -1000.0;
     });
 
     document
@@ -245,14 +284,14 @@ fn start_animation(canvas: HtmlCanvasElement) {
 
         ctx.clear_rect(0.0, 0.0, width, height);
 
-        let (pointer_x, pointer_y) = *pointer_pos.borrow();
+        let pointer = *pointer_state.borrow();
         let time = js_sys::Date::now();
 
         ctx.set_fill_style_str(PARTICLE_COLOR);
 
         let mut particles = particles.borrow_mut();
         for particle in particles.iter_mut() {
-            particle.update(pointer_x, pointer_y, time, reduced_motion);
+            particle.update(pointer, time, drift_scale, reduced_motion);
             particle.draw(&ctx);
         }
 
